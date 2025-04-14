@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: cura-chatbot-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python api.py
+    envVars:
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: GROQ_API_KEY
+        sync: false
