@@ -5,6 +5,8 @@ from groq import Groq
 from langchain_core.prompts import PromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
+from langchain_community.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Fix tokenizers + torch multiprocessing issues
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -18,7 +20,7 @@ CORS(app, resources={
             "http://localhost:3000",
             "http://localhost:5173",
             "http://localhost:8080",
-            "https://cura-health-compass-main-3-h3pkd7g3l.vercel.app",
+            "https://cura-health-compass-main-3-h3pkd7d7g3l.vercel.app",
             "https://cura-health-compass-main-3-bzpwhymo6.vercel.app"
         ],
         "methods": ["GET", "POST", "OPTIONS"],
@@ -26,19 +28,52 @@ CORS(app, resources={
     }
 })
 
-DB_FAISS_PATH = "vectorstore/db_faiss"
-
-# Initialize vectorstore
 def get_vectorstore():
-    embedding_model = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
-    db = FAISS.load_local(
-        DB_FAISS_PATH,
-        embedding_model,
-        allow_dangerous_deserialization=True
-    )
-    return db
+    try:
+        print("Loading vectorstore from disk...")
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        index_path = os.path.join(current_dir, "vectorstore", "db_faiss")
+        print(f"Looking for vectorstore at: {index_path}")
+        
+        if not os.path.exists(index_path):
+            print("Vectorstore not found, creating new one...")
+            return create_new_vectorstore()
+            
+        embeddings = HuggingFaceEmbeddings()
+        vectorstore = FAISS.load_local(index_path, embeddings)
+        print("Vectorstore loaded successfully")
+        return vectorstore
+    except Exception as e:
+        print(f"Error loading vectorstore: {str(e)}")
+        raise
+
+def create_new_vectorstore():
+    try:
+        print("Creating new vectorstore...")
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        pdf_path = os.path.join(current_dir, "data", "encyclopedia-of-medicine-vol-1-5-3rd-edition copy.pdf")
+        
+        if not os.path.exists(pdf_path):
+            raise FileNotFoundError(f"PDF file not found at {pdf_path}")
+            
+        loader = PyPDFLoader(pdf_path)
+        pages = loader.load()
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        chunks = text_splitter.split_documents(pages)
+        
+        embeddings = HuggingFaceEmbeddings()
+        vectorstore = FAISS.from_documents(chunks, embeddings)
+        
+        # Save the vectorstore
+        index_path = os.path.join(current_dir, "vectorstore", "db_faiss")
+        os.makedirs(os.path.dirname(index_path), exist_ok=True)
+        vectorstore.save_local(index_path)
+        
+        print("New vectorstore created and saved successfully")
+        return vectorstore
+    except Exception as e:
+        print(f"Error creating vectorstore: {str(e)}")
+        raise
 
 def set_custom_prompt():
     custom_prompt_template = """
@@ -142,18 +177,28 @@ def get_medical_response(user_query):
 @app.route('/api/chat', methods=['POST'])
 def chat():
     try:
-        data = request.json
+        data = request.get_json()
         if not data or 'message' not in data:
             return jsonify({'error': 'No message provided'}), 400
 
-        # Handle ping request for health check
-        if data['message'] == 'ping':
+        message = data['message']
+        
+        # Special case for ping
+        if message.lower() == 'ping':
             return jsonify({'response': 'pong'}), 200
-
-        response = get_medical_response(data['message'])
-        return jsonify({'response': response}), 200
-
+            
+        print(f"Received message: {message}")
+        
+        try:
+            response = get_medical_response(message)
+            print(f"Generated response: {response}")
+            return jsonify({'response': response}), 200
+        except Exception as e:
+            print(f"Error generating response: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+            
     except Exception as e:
+        print(f"Error in chat endpoint: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])
