@@ -12,9 +12,15 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 app = Flask(__name__)
 
 # Configure CORS
-cors = CORS(app, resources={
-    r"/api/*": {
-        "origins": os.environ.get('ALLOWED_ORIGINS', '*'),
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://localhost:8080",
+            "https://cura-health-compass-main-3-h3pkd7g3l.vercel.app",
+            "https://cura-health-compass-main-3-bzpwhymo6.vercel.app"
+        ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
     }
