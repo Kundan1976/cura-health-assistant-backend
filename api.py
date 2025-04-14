@@ -40,7 +40,7 @@ def get_vectorstore():
             return create_new_vectorstore()
             
         embeddings = HuggingFaceEmbeddings()
-        vectorstore = FAISS.load_local(index_path, embeddings)
+        vectorstore = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
         print("Vectorstore loaded successfully")
         return vectorstore
     except Exception as e:
